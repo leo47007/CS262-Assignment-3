@@ -33,7 +33,7 @@ def main():
         2. client user input via 'sys.stdin'
     '''
     sockets_list = [sys.stdin, client]
-
+    Leader = 0 # Assuming the server with index 0 as the leader for initialization
     while True:
         read_objects, _, _ = select(sockets_list, [], []) # do not use wlist, xlist
 
@@ -48,8 +48,15 @@ def main():
                 # Server socket has disconnected
                 if not message:
                     print('Server @ {}:{} disconnected!'.format(ip_address, PORT))
-                    client.close()
-                    sys.exit('Closing application.')
+                    Leader = Leader + 1
+                    # Creates client socket with IPv4 and TCP
+                    client = socket(family=AF_INET, type=SOCK_STREAM)
+                    # Connect to server socket
+                    client.connect((ip_address, PORT+Leader))
+                    print('Successfully connected to server @ {}:{}'.format(ip_address, PORT))
+                    sockets_list = [sys.stdin, client]
+                    # client.close()
+                    # sys.exit('Closing application.')
                 else:
                     print(message.decode(encoding=ENCODING))
 
