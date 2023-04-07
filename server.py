@@ -129,7 +129,14 @@ def login(sock, addr, users, active_sockets, backup_sockets, attempt_num):
 
 # Handles 1) user creation and 2) login for users
 def welcome(sock, addr, users, active_sockets, backup_sockets):
-    sock.send('\nPlease enter 1 or 2 :\n1. Create account.\n2. Login'.encode(encoding=ENCODING))
+    # Send to client all backup IPs
+    message = ''
+    for server_address in SERVER_ADDRS[1:]:
+        message += server_address
+        message += ','
+    message += '@'
+    message += '\nPlease enter 1 or 2 :\n1. Create account.\n2. Login'
+    sock.send(message.encode(encoding=ENCODING))
     choice = sock.recv(BUFFER_SIZE)
     if not choice:
         remove_connection(sock, addr, active_sockets)
@@ -148,13 +155,7 @@ def welcome(sock, addr, users, active_sockets, backup_sockets):
 
 # Thread for server socket to interact with each client user in chat application
 def client_thread(sock, addr, users, active_sockets, machine_num, backup_sockets):
-    # Send to client all backup IPs
-    message = ''
-    for server_address in SERVER_ADDRS[1:]:
-        message += server_address
-        message += ','
-    message += '@'
-    sock.send(message.encode(encoding=ENCODING))
+    
 
      # Handle 1) user creation and 2) login
     print('*** in client thread')

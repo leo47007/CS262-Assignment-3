@@ -83,6 +83,7 @@ def main():
                 else:
                     if init:
                         msg = message.decode(encoding=ENCODING).split('@')
+                        print(msg)
                         addr_list = msg[0].split(',')[:-1]
                         welcome_msg = msg[1]
                         for addr in addr_list:
