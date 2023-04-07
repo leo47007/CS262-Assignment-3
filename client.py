@@ -11,7 +11,7 @@ import sys
 # Constants/configurations
 ENCODING    = 'utf-8' # message encoding
 BUFFER_SIZE = 2048 # fixed 2KB buffer size
-PORT        = 1234 # fixed application port
+# PORT        = 1234 # fixed application port
 
 # Fault-tolerance
 REPLICATION = 2 # 2-fault tolerant system
@@ -19,11 +19,12 @@ REPLICATION = 2 # 2-fault tolerant system
 # Main function for client functionality
 def main():
     # Get IP address and port number of server socket
-    if len(sys.argv) != 2:
-        print('Usage: python3 client.py IP_ADDRESS')
+    if len(sys.argv) != 3:
+        print('Usage: python3 client.py IP_ADDRESS PORT')
         sys.exit('client.py exiting')
     ip_address = str(sys.argv[1])
-
+    PORT = int(sys.argv[2])
+    
     # Creates client socket with IPv4 and TCP
     client = socket(family=AF_INET, type=SOCK_STREAM)
     # Connect to server socket
