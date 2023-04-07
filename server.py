@@ -14,7 +14,7 @@ ENCODING    = 'utf-8' # message encoding
 BUFFER_SIZE = 2048 # fixed 2KB buffer size
 PORT        = 1234 # fixed application port
 
-SERVER_IP      = '10.250.249.9' # REPLACE ME with output of ipconfig getifaddr en0
+SERVER_IP      = '10.250.124.243' # REPLACE ME with output of ipconfig getifaddr en0
 MAX_CLIENTS    = 100
 LOGIN_ATTEMPTS = 3
 
@@ -33,6 +33,8 @@ def remove_connection(sock, addr, active_sockets):
 
 # Handles user creation for new users
 def create_user(sock, addr, users, active_sockets):
+    print("DEBUG*****")
+    print(addr)
     # Solicit username
     sock.send('\nPlease enter a username: '.encode(encoding=ENCODING))
     username = sock.recv(BUFFER_SIZE)
@@ -148,8 +150,8 @@ def welcome(sock, addr, users, active_sockets, backup_sockets):
 def client_thread(sock, addr, users, active_sockets, machine_num, backup_sockets):
     # Send to client all backup IPs
     message = ''
-    for addr in SERVER_ADDRS[1:]:
-        message += addr
+    for server_address in SERVER_ADDRS[1:]:
+        message += server_address
         message += ','
     message += '@'
     sock.send(message.encode(encoding=ENCODING))
