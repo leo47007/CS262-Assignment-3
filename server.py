@@ -14,12 +14,14 @@ ENCODING    = 'utf-8' # message encoding
 BUFFER_SIZE = 2048 # fixed 2KB buffer size
 PORT        = 1234 # fixed application port
 
-SERVER_IP      = '100.88.105.243' # REPLACE ME with output of ipconfig getifaddr en0
+SERVER_IP      = '10.250.124.243' # REPLACE ME with output of ipconfig getifaddr en0
 MAX_CLIENTS    = 100
 LOGIN_ATTEMPTS = 3
-REPLICATION = 2
+REPLICATION = 3
 LEADER = 0
 INFO_COUNT = 3 # username, password, and mailbox length
+SERVER_ADDRS = [SERVER_IP]
+
 
 # Remove sock from active sockets
 def remove_connection(sock, addr, active_sockets):
@@ -244,14 +246,18 @@ def connect_with_leader(my_machine_number):
     port   = PORT + LEADER
     client = socket(family=AF_INET, type=SOCK_STREAM) # creates client socket with IPv4 and TCP
     # client.setsockopt(SOL_SOCKET, SO_SNDBUF, BUFFER_SIZE)
-    client.connect((SERVER_IP, port)) # connect to server socket
+    print("SERVER_ADDRS[LEADER]")
+    print(SERVER_ADDRS)
+    print(LEADER)
+    client.connect((SERVER_ADDRS[LEADER], port)) # connect to server socket
     client_sockets.append(client)
-    print('({}-{}) LEADER-backup socket established @ {}:{}.'.format(LEADER, my_machine_number, SERVER_IP, port))
+    print('({}-{}) LEADER-backup socket established @ {}:{}.'.format(LEADER, my_machine_number, SERVER_ADDRS[LEADER], port))
     return client_sockets
 
 def main():
     global LEADER
     global REPLICATION
+    global SERVER_ADDRS
     if len(sys.argv) != 2:
         print('Usage: python3 server.py machine_number')
         sys.exit('server.py exiting')
@@ -282,12 +288,24 @@ def main():
         if machine_num ==LEADER:
             backup_sockets = []
             for backup in range(REPLICATION-1):
-                sock, client_addr = server.accept()
+                sock, backup_addr = server.accept()
                 backup_sockets.append(sock)
+                SERVER_ADDRS.append(backup_addr[0])
+                
+            message = ''
+            for addr in SERVER_ADDRS[1:]:
+                message += addr
+                message += ','
+            sock.send(message.encode(encoding=ENCODING))
             while True:
                 sock, client_addr = server.accept()
                 active_sockets.append(sock) # update active sockets list
                 print ('{}:{} connected'.format(client_addr[0], client_addr[1]))
+                message = ''
+                for addr in SERVER_ADDRS[1:]:
+                    message += addr
+                    message += ','
+                sock.send(message.encode(encoding=ENCODING))
                 # Start new thread for each client user
                 Thread(target=client_thread, args=(sock, client_addr, users, active_sockets, machine_num, backup_sockets)).start()
         else:
@@ -299,8 +317,7 @@ def main():
                 # Server socket has disconnected
                 if not message:
                     print('Server @ {}:{} disconnected!'.format(SERVER_IP, PORT+LEADER))
-                    REPLICATION = REPLICATION - 1
-                    LEADER = LEADER + 1
+                    LEADER = LEADER + 1 
                     if machine_num != LEADER:
                         leader_sockets = connect_with_leader(machine_num)
                 else:
