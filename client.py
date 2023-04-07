@@ -12,7 +12,9 @@ import sys
 ENCODING    = 'utf-8' # message encoding
 BUFFER_SIZE = 2048 # fixed 2KB buffer size
 PORT        = 1234 # fixed application port
-REPLICATION = 3
+
+# Fault-tolerance
+REPLICATION = 2 # 2-fault tolerant system
 
 # Main function for client functionality
 def main():
@@ -34,9 +36,12 @@ def main():
         2. client user input via 'sys.stdin'
     '''
     sockets_list = [sys.stdin, client]
-    Leader = 0 # Assuming the server with index 0 as the leader for initialization
-    server_addrs = [ip_address]
-    init = True
+
+    # Enabling fault-tolerance
+    leader = 0 # initialize the server with index 0 as leader
+    server_addrs = [ip_address] # list of all possible server IP addresses
+    init = True # initialization phase where first leader sends backup IPs
+
     while True:
         read_objects, _, _ = select(sockets_list, [], []) # do not use wlist, xlist
 
@@ -51,36 +56,42 @@ def main():
                 message = read_object.recv(BUFFER_SIZE)
                 # Server socket has disconnected
                 if not message:
-                    print('Server @ {}:{} disconnected!'.format(ip_address, PORT+Leader))
-                    back_success =False
-                    while not back_success:
-                        Leader = Leader + 1
+                    print('Server @ {}:{} disconnected!'.format(ip_address, PORT+leader))
+
+                    backup_success = False
+                    while not backup_success and leader <= REPLICATION:
+                        leader = leader + 1
                         try:
                             # Creates client socket with IPv4 and TCP
                             client = socket(family=AF_INET, type=SOCK_STREAM)
                             # Connect to server socket
-                            ip_address = server_addrs[Leader]
-                            print("ip_address: ")
-                            print(ip_address, PORT+Leader)
-                        
-                            client.connect((ip_address, PORT+Leader))
-                            back_success = True
+                            ip_address = server_addrs[leader]
+                            print("Attempting to connect to backup @ {}:{}".format(ip_address, PORT+leader))
+                            client.connect((ip_address, PORT+leader))
+                            sockets_list = [sys.stdin, client]
+                            init = True
+                            backup_success = True
                         except:
                             continue
 
-                    if back_success:
-                        print('Successfully connected to server @ {}:{}'.format(ip_address, PORT+Leader))
-                        sockets_list = [sys.stdin, client]
-                    # client.close()
-                    # sys.exit('Closing application.')
+                    if backup_success:
+                        print('Successfully connected to backup server @ {}:{}'.format(ip_address, PORT+leader))
+                        
+                    else:
+                        client.close()
+                        sys.exit('Not able to find backup server. Closing application.')
                 else:
                     if init:
-                        info_list = message.decode(encoding=ENCODING).split(',')
-                        for info in info_list:
-                            server_addrs.append(info)
+                        msg = message.decode(encoding=ENCODING).split('@')
+                        addr_list = msg[0].split(',')[:-1]
+                        welcome_msg = msg[1]
+                        for addr in addr_list:
+                            server_addrs.append(addr)
                         init = False
-              
-                    print(message.decode(encoding=ENCODING))
+                        print('All backup server IP addresses: {}'.format(addr_list))
+                        print(welcome_msg)
+                    else:
+                        print(message.decode(encoding=ENCODING))
 
 
 if __name__ == '__main__':
