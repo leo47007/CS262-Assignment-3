@@ -312,11 +312,9 @@ def main():
             for addr in SERVER_ADDRS[1:]:
                 message += addr
                 message += ','
-            print("*** {}".format(backup_sockets))
             for backup_socket in backup_sockets:
                 backup_socket.send(message.encode(encoding=ENCODING))
                 print('LEADER: Finished sending backup IP addresses to {}'.format(backup_socket))
-            print('*** finish')
             # Main leader server loop
             while True:
                 sock, client_addr = server.accept()
@@ -332,18 +330,12 @@ def main():
             # Leader server socket has disconnected
             if not message:
                 print('BACKUP: Leader server @ {}:{} disconnected!'.format(SERVER_ADDRS[LEADER], PORT+LEADER))
-                backup_success = False
-                while not backup_success and REPLICATION > 0:
-                    LEADER      = LEADER + 1
-                    REPLICATION = REPLICATION - 1
-                    try:
-                        # if I am a replica, try to connect to new leader
-                        if machine_num != LEADER:
-                            backup_client_socket = connect_with_leader(machine_num)
-                            backup_init = True
-                            backup_success = True
-                    except:
-                        continue
+                LEADER      = LEADER + 1
+                REPLICATION = REPLICATION - 1
+                # if I am a replica, connect to new leader
+                if machine_num != LEADER:
+                    backup_client_socket = connect_with_leader(machine_num)
+                    backup_init = True
 
             # Recieved message from leader server socket
             else:
