@@ -58,7 +58,8 @@ def main():
                 # Server socket has disconnected
                 if not message:
                     print('Server @ {}:{} disconnected!'.format(ip_address, PORT+leader))
-
+                    import time
+                    time.sleep(0.5)
                     backup_success = False
                     while not backup_success and leader <= REPLICATION:
                         leader = leader + 1
@@ -83,6 +84,7 @@ def main():
                         sys.exit('Not able to find backup server. Closing application.')
                 else:
                     if init:
+                        print(message.decode(encoding=ENCODING))
                         msg = message.decode(encoding=ENCODING).split('@')
                         print(msg)
                         addr_list = msg[0].split(',')[:-1]

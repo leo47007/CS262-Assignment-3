@@ -304,22 +304,32 @@ def main():
             backup_sockets = []
             SERVER_ADDRS = [SERVER_IP]
             # Make sure leader is connected with all required number of backups
+            if LEADER != 0:
+                server.settimeout(0.1)
             for backup_num in range(REPLICATION):
-                sock, backup_addr = server.accept()
-                backup_sockets.append(sock)
-                SERVER_ADDRS.append(backup_addr[0])
-                print('LEADER: {}/{} LEADER-backup socket established @ backup IP'.format(backup_num+1, REPLICATION, backup_addr[0]))
+                try: 
+                    sock, backup_addr = server.accept()
+                    backup_sockets.append(sock)
+                    SERVER_ADDRS.append(backup_addr[0])
+                    print('LEADER: {}/{} LEADER-backup socket established @ backup IP'.format(backup_num+1, REPLICATION, backup_addr[0]))
+                # except socket.timeout:
+                except:
+                    REPLICATION -= 1
+                    pass
+            
             print('LEADER: SERVER_ADDRS: {}'.format(SERVER_ADDRS))
             # Send to each backup complete list of backup IP_addresses
-            message = ''
-            for addr in SERVER_ADDRS[1:]:
-                message += addr
-                message += ','
-            for backup_socket in backup_sockets:
-                backup_socket.send(message.encode(encoding=ENCODING))
-                print('LEADER: Finished sending backup IP addresses to {}'.format(backup_socket))
+            if REPLICATION > 0:
+                message = ''
+                for addr in SERVER_ADDRS[1:]:
+                    message += addr
+                    message += ','
+                for backup_socket in backup_sockets:
+                    backup_socket.send(message.encode(encoding=ENCODING))
+                    print('LEADER: Finished sending backup IP addresses to {}'.format(backup_socket))
             # Main leader server loop
             while True:
+                server.settimeout(None)
                 sock, client_addr = server.accept()
                 active_sockets.append(sock) # update active sockets list
                 print ('LEADER: {}:{} connected'.format(client_addr[0], client_addr[1]))
@@ -333,12 +343,18 @@ def main():
             # Leader server socket has disconnected
             if not message:
                 print('BACKUP: Leader server @ {}:{} disconnected!'.format(SERVER_ADDRS[LEADER], PORT+LEADER))
-                LEADER      = LEADER + 1
-                REPLICATION = REPLICATION - 1
-                # if I am a replica, connect to new leader
-                if machine_num != LEADER:
-                    backup_client_socket = connect_with_leader(machine_num)
-                    backup_init = True
+                backup_success = False
+                while not backup_success:
+                    LEADER      = LEADER + 1
+                    try:
+                        # if I am a replica, connect to new leader
+                        if machine_num != LEADER:
+                            backup_client_socket = connect_with_leader(machine_num)
+                            backup_init = True
+                        else:
+                            backup_success = True
+                    except:
+                        continue
 
             # Recieved message from leader server socket
             else:
