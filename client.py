@@ -44,6 +44,8 @@ def main():
     server_addrs = [ip_address] # list of all possible server IP addresses
     init = True # initialization phase where leader sends backup IPs
 
+    attempt_to_delete = False # variable to make sure that account deletion does not automatic re-connect
+
     while True:
         read_objects, _, _ = select(sockets_list, [], []) # do not use wlist, xlist
 
@@ -53,6 +55,14 @@ def main():
             if read_object == sys.stdin:
                 message = sys.stdin.readline()
                 client.send(message.encode(encoding=ENCODING))
+                if attempt_to_delete:
+                    if message == "confirm\n":
+                        client.close()
+                        sys.exit('Deleted account. closing application.')
+                    else:
+                        attempt_to_delete = False
+                if message == '3\n':
+                    attempt_to_delete = True
             # Recieved message from server socket
             else:
                 message = read_object.recv(BUFFER_SIZE)

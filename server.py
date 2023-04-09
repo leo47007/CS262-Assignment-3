@@ -128,13 +128,7 @@ def login(sock, addr, users, active_sockets, backup_sockets, attempt_num):
 
 # Handles 1) user creation and 2) login for users
 def welcome(sock, addr, users, active_sockets, backup_sockets):
-    # For initialization, send to client all backup IPs
-    message = ''
-    for server_address in server_addrs[1:]:
-        message += server_address
-        message += ','
-    message += '@'
-    message += '\nPlease enter 1 or 2 :\n1. Create account.\n2. Login'
+    message = '\nPlease enter 1 or 2 :\n1. Create account.\n2. Login'
     sock.send(message.encode(encoding=ENCODING))
 
     choice = sock.recv(BUFFER_SIZE)
@@ -151,13 +145,22 @@ def welcome(sock, addr, users, active_sockets, backup_sockets):
         sock.send('{} is not a valid option. Please enter either 1 or 2!'.format(choice).encode(encoding=ENCODING))
         welcome(sock, addr, users, active_sockets, backup_sockets)
 
-    update_state(backup_sockets, users, state=0)
+    update_state(backup_sockets, users)
     return username
 
 # Thread for server socket to interact with each client user in chat application
 def client_thread(sock, addr, users, active_sockets, backup_sockets):
      # Handle 1) user creation and 2) login
     print('*** started client thread!')
+
+    # For initialization, send to client all backup IPs
+    message = ''
+    for server_address in server_addrs[1:]:
+        message += server_address
+        message += ','
+    message += '@'
+    sock.send(message.encode(encoding=ENCODING))
+    
     src_username = welcome(sock, addr, users, active_sockets, backup_sockets)
 
     # Let user know all other users available for messaging
@@ -233,7 +236,7 @@ def client_thread(sock, addr, users, active_sockets, backup_sockets):
 
             else:
                 sock.send('\n{} is not a valid option. Please enter either 1, 2, or 3.'.format(choice).encode(encoding=ENCODING))
-            update_state(backup_sockets, users, state=0)
+            update_state(backup_sockets, users)
         # If we're unable to send a message, close connection.  
         except:
             remove_connection(sock, addr, active_sockets)
@@ -241,7 +244,7 @@ def client_thread(sock, addr, users, active_sockets, backup_sockets):
             return
 
 # Updates backup server states based
-def update_state(backup_sockets, users, state=0):
+def update_state(backup_sockets, users):
     print("LEADER: Updating states in backup replica servers")
     for username in users:
         for sock in backup_sockets:
