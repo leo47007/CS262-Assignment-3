@@ -1,28 +1,29 @@
 '''
 This file implements server functionality of chat application.
 
-Usage: python3 server.py
+Usage: python3 server.py LEADER_IP MACHINE_NUM
 '''
 # Import relevant python packages
-from select import select
 from collections import defaultdict
 from socket import socket, AF_INET, SOCK_STREAM, SOL_SOCKET, SO_REUSEADDR
 from threading import Thread
 import sys
+
 # Constants/configurations
 ENCODING    = 'utf-8' # message encoding
 BUFFER_SIZE = 2048 # fixed 2KB buffer size
-PORT        = 1234 # fixed application port
+PORT        = 1234 # base application port for leader server
 
-SERVER_IP      = '10.250.124.243' # REPLACE ME with output of ipconfig getifaddr en0
+SERVER_IP      = '100.90.130.16' # REPLACE ME with output of ipconfig getifaddr en0
 MAX_CLIENTS    = 100
 LOGIN_ATTEMPTS = 3
 
-# Fault Tolerance
-REPLICATION  = 2 # Number of servers (leader + replicas)
-LEADER       = 0 # server ID for leader
-INFO_COUNT   = 3 # state length (username, password, and mailbox length)
-SERVER_ADDRS = [] # list of server IP addresses
+# Fault-tolerance (parameters and global variables)
+STATE_SIZE   = 3 # state length (username, password, and mailbox length)
+TIMEOUT_TIME = 0.1 # time for waiting for potential backup to connect (in seconds)
+replicas     = 2 # 2-fault tolerant system
+leader       = 0 # server ID for leader
+server_addrs = [] # list of server IP addresses
 
 # Remove sock from active sockets
 def remove_connection(sock, addr, active_sockets):
@@ -33,8 +34,6 @@ def remove_connection(sock, addr, active_sockets):
 
 # Handles user creation for new users
 def create_user(sock, addr, users, active_sockets):
-    print("DEBUG*****")
-    print(addr)
     # Solicit username
     sock.send('\nPlease enter a username: '.encode(encoding=ENCODING))
     username = sock.recv(BUFFER_SIZE)
@@ -129,14 +128,15 @@ def login(sock, addr, users, active_sockets, backup_sockets, attempt_num):
 
 # Handles 1) user creation and 2) login for users
 def welcome(sock, addr, users, active_sockets, backup_sockets):
-    # Send to client all backup IPs
+    # For initialization, send to client all backup IPs
     message = ''
-    for server_address in SERVER_ADDRS[1:]:
+    for server_address in server_addrs[1:]:
         message += server_address
         message += ','
     message += '@'
     message += '\nPlease enter 1 or 2 :\n1. Create account.\n2. Login'
     sock.send(message.encode(encoding=ENCODING))
+
     choice = sock.recv(BUFFER_SIZE)
     if not choice:
         remove_connection(sock, addr, active_sockets)
@@ -150,15 +150,14 @@ def welcome(sock, addr, users, active_sockets, backup_sockets):
     else:
         sock.send('{} is not a valid option. Please enter either 1 or 2!'.format(choice).encode(encoding=ENCODING))
         welcome(sock, addr, users, active_sockets, backup_sockets)
-    update(users, backup_sockets)
+
+    update_state(backup_sockets, users, state=0)
     return username
 
 # Thread for server socket to interact with each client user in chat application
-def client_thread(sock, addr, users, active_sockets, machine_num, backup_sockets):
-    
-
+def client_thread(sock, addr, users, active_sockets, backup_sockets):
      # Handle 1) user creation and 2) login
-    print('*** in client thread')
+    print('*** started client thread!')
     src_username = welcome(sock, addr, users, active_sockets, backup_sockets)
 
     # Let user know all other users available for messaging
@@ -234,46 +233,47 @@ def client_thread(sock, addr, users, active_sockets, machine_num, backup_sockets
 
             else:
                 sock.send('\n{} is not a valid option. Please enter either 1, 2, or 3.'.format(choice).encode(encoding=ENCODING))
-            update(users, backup_sockets)
+            update_state(backup_sockets, users, state=0)
         # If we're unable to send a message, close connection.  
         except:
             remove_connection(sock, addr, active_sockets)
             print('{} logged off.'.format(src_username))
             return
-        
-def update(users, backup_sockets):
-    print("Updating states in Backup replicas")
-    for index, username in enumerate(users):
+
+# Updates backup server states based
+def update_state(backup_sockets, users, state=0):
+    print("LEADER: Updating states in backup replica servers")
+    for username in users:
         for sock in backup_sockets:
             message = '{}.{}.{}.'.format(username, users[username]['password'], len(users[username]['mailbox']))
-        
             if len(users[username]['mailbox']) != 0:
                 for mail in users[username]['mailbox']:
                     message += '{}.'.format(mail)
             sock.send(message.encode(encoding=ENCODING))
 
-# Creates and connects client sockets for model machines that have lower machine number than you.
-def connect_with_leader(my_machine_number):
-    leader_port   = PORT + LEADER
+# Creates a client socket for backup server to connect to leader server
+def connect_with_leader(my_machine_num):
+    leader_port = PORT + leader
     client = socket(family=AF_INET, type=SOCK_STREAM) # creates client socket with IPv4 and TCP
-    client.connect((SERVER_ADDRS[LEADER], leader_port)) # connect to server socket
-    print('BACKUP: ({}-{}) LEADER-backup socket established @ {}:{}.'.format(LEADER, my_machine_number, SERVER_ADDRS[LEADER], leader_port))
+    client.connect((server_addrs[leader], leader_port)) # connect to server socket
+    print('BACKUP: ({}-{}) LEADER-BACKUP socket established @ {}:{}.'.format(leader, my_machine_num, server_addrs[leader], leader_port))
     return client
 
 def main():
     # Global variables that have to be updated throughout
-    global LEADER
-    global REPLICATION
-    global SERVER_ADDRS
+    global leader
+    global replicas
+    global server_addrs
 
     if len(sys.argv) != 3:
-        print('Usage: python3 server.py leader_ip machine_number')
+        print('Usage: python3 server.py LEADER_IP MACHINE_NUM')
         sys.exit('server.py exiting')
     
     leader_ip   = str(sys.argv[1])
     machine_num = int(sys.argv[2])
-    assert machine_num <= REPLICATION, 'Model machine number greater than expected total number of model machines'
-    SERVER_ADDRS = [leader_ip]
+    assert machine_num <= replicas, 'Model machine number greater than expected total number of model machines'
+    
+    server_addrs = [leader_ip] # initialize list of server IPs with leader IP address
 
     # Creates server socket with IPv4 and TCP
     server = socket(AF_INET, SOCK_STREAM)
@@ -284,7 +284,7 @@ def main():
     server.listen(MAX_CLIENTS) # accept up to MAX_CLIENTS active connections
 
     # If you are a replica, connect to the leader server
-    if machine_num != LEADER:
+    if machine_num != leader:
         backup_client_socket = connect_with_leader(machine_num)
     
     active_sockets = [] # running list of active client sockets
@@ -300,33 +300,37 @@ def main():
 
     while True:
         # Leader Execution
-        if machine_num == LEADER:
+        if machine_num == leader:
+            # If you are an initializing leader, create a clean slate of backup server sockets and IP addresses
             backup_sockets = []
-            SERVER_ADDRS = [SERVER_IP]
-            # Make sure leader is connected with all required number of backups
-            if LEADER != 0:
-                server.settimeout(0.1)
-            for backup_num in range(REPLICATION):
-                try: 
+            server_addrs   = [SERVER_IP] # first IP is your own (leader's local IP)
+            
+            # If you are a new leader, set timeout for waiting for each potential backup server.
+            if leader != 0:
+                server.settimeout(TIMEOUT_TIME)
+
+            # Attempt to connect to replicas number of backup servers
+            for backup_num in range(replicas):
+                try:
                     sock, backup_addr = server.accept()
                     backup_sockets.append(sock)
-                    SERVER_ADDRS.append(backup_addr[0])
-                    print('LEADER: {}/{} LEADER-backup socket established @ backup IP'.format(backup_num+1, REPLICATION, backup_addr[0]))
-                # except socket.timeout:
+                    server_addrs.append(backup_addr[0])
+                    print('LEADER: {}/{} LEADER-backup socket established @ {}'.format(backup_num+1, replicas, backup_addr[0]))
                 except:
-                    REPLICATION -= 1
+                    replicas -= 1 # could not connect to this backup due to timeout
                     pass
-            
-            print('LEADER: SERVER_ADDRS: {}'.format(SERVER_ADDRS))
+            print('LEADER: server_addrs: {}'.format(server_addrs))
+
             # Send to each backup complete list of backup IP_addresses
-            if REPLICATION > 0:
+            if replicas > 0:
                 message = ''
-                for addr in SERVER_ADDRS[1:]:
+                for addr in server_addrs[1:]:
                     message += addr
                     message += ','
                 for backup_socket in backup_sockets:
                     backup_socket.send(message.encode(encoding=ENCODING))
-                    print('LEADER: Finished sending backup IP addresses to {}'.format(backup_socket))
+                    print('LEADER: Finished sending backup IP addresses to backup @ {}'.format(backup_socket))
+            
             # Main leader server loop
             while True:
                 server.settimeout(None)
@@ -334,7 +338,7 @@ def main():
                 active_sockets.append(sock) # update active sockets list
                 print ('LEADER: {}:{} connected'.format(client_addr[0], client_addr[1]))
                 # Start new thread for each client user
-                Thread(target=client_thread, args=(sock, client_addr, users, active_sockets, machine_num, backup_sockets)).start()
+                Thread(target=client_thread, args=(sock, client_addr, users, active_sockets, backup_sockets)).start()
         
         # Backup Execution
         else:
@@ -342,15 +346,20 @@ def main():
 
             # Leader server socket has disconnected
             if not message:
-                print('BACKUP: Leader server @ {}:{} disconnected!'.format(SERVER_ADDRS[LEADER], PORT+LEADER))
+                print('BACKUP: Leader server @ {}:{} disconnected!'.format(server_addrs[leader], PORT+leader))
+
+                # Attempt to connect to new leader (if you are new leader, you will exit this block)
                 backup_success = False
                 while not backup_success:
-                    LEADER      = LEADER + 1
+                    leader += 1
+                    replicas -= 1
                     try:
-                        # if I am a replica, connect to new leader
-                        if machine_num != LEADER:
+                        # If I am a replica, try to connect to new leader
+                        if machine_num != leader:
                             backup_client_socket = connect_with_leader(machine_num)
-                            backup_init = True
+                            backup_init = True # ensure backup initialization phase
+                            backup_success = True
+                        # If I am new leader, exit this loop and start leader initialization
                         else:
                             backup_success = True
                     except:
@@ -358,24 +367,27 @@ def main():
 
             # Recieved message from leader server socket
             else:
+                # Backup initialization phase: recieve all backup IPs
                 if backup_init:
-                    SERVER_ADDRS = [SERVER_ADDRS[LEADER]]
+                    server_addrs = [server_addrs[leader]]
                     addr_list = message.decode(encoding=ENCODING).split(',')[:-1]
                     for addr in addr_list:
-                        SERVER_ADDRS.append(addr)
-                    print('BACKUP: All server IP addresses: {}'.format(SERVER_ADDRS))
+                        server_addrs.append(addr)
+                    print('BACKUP: All server IP addresses: {}'.format(server_addrs))
                     backup_init = False
+                # Normal backup loop: recieve updates from leader server
                 else:
-                    print('<MSG from LEADER>: {}'.format(users))
-                    info_list = message.decode(encoding=ENCODING).split('.')
+                    leader_msg = message.decode(encoding=ENCODING).split('.')
 
-                    username  = info_list[0]
-                    users[username]['password'] = info_list[1]
-                    info_count = int(info_list[2])
+                    username                    = leader_msg[0]
+                    users[username]['password'] = leader_msg[1]
+                    mailbox_len                 = int(leader_msg[2])
+
                     users[username]['mailbox'] = []
-                    if info_count != 0:
-                        for info_index in range(info_count):
-                            users[username]['mailbox'].append(info_list[INFO_COUNT + info_index])
+                    if mailbox_len != 0:
+                        for mail_idx in range(mailbox_len):
+                            users[username]['mailbox'].append(leader_msg[STATE_SIZE + mail_idx])
+                    print('<msg from LEADER>: {}'.format(users))
 
 if __name__ == '__main__':
     main()

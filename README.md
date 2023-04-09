@@ -1,6 +1,9 @@
 # CS262-Assignment-3
 
-In three separate terminals, do the following in sequence.
-- `python3 server.py 0`
-- `python3 server.py 1`
-- `python3 client.py SERVER_IP`
+First, update the `SERVER_IP` variable within `server.py` to your local IP address with the result of `ipconfig getifaddr en0`.
+
+Then, in four separate terminals, run the following in sequence, where `LEADER_IP` and `LEADER_PORT` are the IP address and port of the leader server socket, respectively.
+- `python3 server.py LEADER_IP 0`
+- `python3 server.py LEADER_IP 1`
+- `python3 server.py LEADER_IP 2`
+- `python3 client.py LEADER_IP LEADER_PORT`
