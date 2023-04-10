@@ -31,7 +31,7 @@ Server replicas do not have to detect whether or not other server replicas have 
 - Since the initial leader is indexed as server `0`, we know the next leader is indexed as server `1`.
 - The next leader has to *attempt* to connect to `replicas` (i.e., the number of expected replicas) number of backups.
 - If a replica is still a replica after the prior leader crashes, this replica will *attempt* to connect to the target next server. 
-If the connection times out, that means this target next server has silently crashed and we will look for the next possible server by further  increasing the `leader` index.
+If the connection times out, that means this target next server has silently crashed and we will look for the next possible server by further increasing the `leader` index.
 
 ## How does the client detect and recover fault crash failures?
 
